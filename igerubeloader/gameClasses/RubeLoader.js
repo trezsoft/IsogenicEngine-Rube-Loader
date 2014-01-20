@@ -10,7 +10,6 @@ var RubeLoaderComponent = IgeClass.extend({
     init: function (entity, options) {
         this._entity = entity;
         this._options = options;
-
     },
 
     /**
@@ -18,12 +17,15 @@ var RubeLoaderComponent = IgeClass.extend({
      * creating box2d bodies,fixtures and joints.
      * @param sceneUrl
      * @param sceneName
+     * @param mountScene
+     * @param isIsometric
+     * @param loadImages
      */
-    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric) {
+    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric, loadImages) {
         var self = this,
             scriptElem;
 
-        this._scale = 1.3;
+        this._scale = 1;
 
         if (typeof(sceneUrl) === 'string') {
             if (!ige.isServer) {
@@ -31,7 +33,7 @@ var RubeLoaderComponent = IgeClass.extend({
                 scriptElem.src = sceneUrl;
                 scriptElem.onload = function () {
                     self.log('Rube data loaded, processing...');
-                    self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric);
+                    self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages);
                 };
                 document.getElementsByTagName('head')[0].appendChild(scriptElem);
             } else {
@@ -42,12 +44,12 @@ var RubeLoaderComponent = IgeClass.extend({
         }
     },
 
-    loadSceneIntoWorld: function (worldJso, mountScene, isIsometric) {
-        var success = true;
+    loadSceneIntoWorld: function (worldJso, mountScene, isIsometric, loadImages) {
+        var success = true, i;
 
         var loadedBodies = [];
         if (worldJso.hasOwnProperty('body')) {
-            for (var i = 0; i < worldJso.body.length; i++) {
+            for (i = 0; i < worldJso.body.length; i++) {
                 var bodyJso = worldJso.body[i];
                 var body = this.loadBodyFromRUBE(bodyJso, mountScene, isIsometric);
                 if (body)
@@ -59,27 +61,27 @@ var RubeLoaderComponent = IgeClass.extend({
 
         var loadedJoints = [];
         if (worldJso.hasOwnProperty('joint')) {
-            for (var i = 0; i < worldJso.joint.length; i++) {
+            for (i = 0; i < worldJso.joint.length; i++) {
                 var jointJso = worldJso.joint[i];
                 var joint = this.loadJointFromRUBE(jointJso, mountScene, loadedBodies);
                 if (joint)
                     loadedJoints.push(joint);
-                //else
-                //    success = false;
             }
         }
 
-        var loadedImages = [];
-        if (worldJso.hasOwnProperty('image')) {
-            for (var i = 0; i < worldJso.image.length; i++) {
-                var imageJso = worldJso.image[i];
-                var image = this.loadImageFromRUBE(imageJso, mountScene, loadedBodies, isIsometric);
-                if (image)
-                    loadedImages.push(image);
-                else
-                    success = false;
-            }
+        if (loadImages) {
+            var loadedImages = [];
+            if (worldJso.hasOwnProperty('image')) {
+                for (i = 0; i < worldJso.image.length; i++) {
+                    var imageJso = worldJso.image[i];
+                    var image = this.loadImageFromRUBE(imageJso, mountScene, loadedBodies, isIsometric);
+                    if (image)
+                        loadedImages.push(image);
+                    else
+                        success = false;
+                }
 
+            }
         }
 
         return success;
@@ -121,15 +123,16 @@ var RubeLoaderComponent = IgeClass.extend({
             physicsEntity.translateTo(bodyJso.position.x * ige.box2d._scaleRatio * this._scale, bodyJso.position.y * ige.box2d._scaleRatio * this._scale * -1, 0);
 
         if (bodyJso.hasOwnProperty('fixture')) {
-            for (k = 0; k < bodyJso['fixture'].length; k++) {
+            for (var k = 0; k < bodyJso['fixture'].length; k++) {
                 var fixtureJso = bodyJso['fixture'][k];
                 this.loadFixtureFromRUBE(physicsEntity._box2dBody, fixtureJso);
             }
         }
 
         if (bodyJso.hasOwnProperty('name'))
-            physicsEntity._box2dBody.name = bodyJso.name;
-        physicsEntity.id(bodyJso.name);
+            var randomId = bodyJso.name + '-' + ige.newIdHex();
+        physicsEntity._box2dBody.name = randomId;
+        physicsEntity.id(randomId);
 
         if (bodyJso.hasOwnProperty('customProperties'))
             physicsEntity._box2dBody.customProperties = bodyJso.customProperties;
@@ -167,7 +170,7 @@ var RubeLoaderComponent = IgeClass.extend({
             fd.shape = new Box2D.Collision.Shapes.b2PolygonShape();
             var verts = [];
 
-            for (v = fixtureJso.polygon.vertices.x.length - 1; v > -1; v--)
+            for (var v = fixtureJso.polygon.vertices.x.length - 1; v > -1; v--)
                 verts.push(new ige.box2d.b2Vec2(fixtureJso.polygon.vertices.x[v] * this._scale, fixtureJso.polygon.vertices.y[v] * this._scale * -1));
             fd.shape.SetAsArray(verts, verts.length);
             fixture = body.CreateFixture(fd);
@@ -177,7 +180,7 @@ var RubeLoaderComponent = IgeClass.extend({
         else if (fixtureJso.hasOwnProperty('chain')) {
             fd.shape = new Box2D.Collision.Shapes.b2PolygonShape();
             var lastVertex = new Box2D.Common.Math.b2Vec2(0, 0);
-            for (v = 0; v < fixtureJso.chain.vertices.x.length; v++) {
+            for (var v = 0; v < fixtureJso.chain.vertices.x.length; v++) {
                 var thisVertex = new Box2D.Common.Math.b2Vec2(fixtureJso.chain.vertices.x[v] * this._scale, fixtureJso.chain.vertices.y[v] * this._scale * -1);
                 if (v > 0) {
                     fd.shape.SetAsEdge(lastVertex, thisVertex);
@@ -228,18 +231,16 @@ var RubeLoaderComponent = IgeClass.extend({
             return null;
         }
 
-        var joint = null;
+        var joint = null, jd = null;
         if (jointJso.type == "revolute") {
-            var jd = new Box2D.Dynamics.Joints.b2RevoluteJointDef();
+            jd = new Box2D.Dynamics.Joints.b2RevoluteJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('refAngle'))
                 jd.referenceAngle = jointJso.refAngle * -1;
             if (jointJso.hasOwnProperty('lowerLimit'))
                 jd.lowerAngle = jointJso.lowerLimit * -1;
-            ;
             if (jointJso.hasOwnProperty('upperLimit'))
                 jd.upperAngle = jointJso.upperLimit * -1;
-            ;
             if (jointJso.hasOwnProperty('maxMotorTorque'))
                 jd.maxMotorTorque = jointJso.maxMotorTorque;
             if (jointJso.hasOwnProperty('motorSpeed'))
@@ -253,7 +254,7 @@ var RubeLoaderComponent = IgeClass.extend({
         else if (jointJso.type == "distance" || jointJso.type == "rope") {
             if (jointJso.type == "rope")
                 console.log("Replacing unsupported rope joint with distance joint!");
-            var jd = new Box2D.Dynamics.Joints.b2DistanceJointDef();
+            jd = new Box2D.Dynamics.Joints.b2DistanceJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('length'))
                 jd.length = jointJso.length * this._scale;
@@ -264,7 +265,7 @@ var RubeLoaderComponent = IgeClass.extend({
             joint = ige.box2d._world.CreateJoint(jd);
         }
         else if (jointJso.type == "prismatic") {
-            var jd = new Box2D.Dynamics.Joints.b2PrismaticJointDef();
+            jd = new Box2D.Dynamics.Joints.b2PrismaticJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('localAxisA'))
                 jd.localAxisA.SetV(this.getVectorValue(jointJso.localAxisA));
@@ -289,7 +290,7 @@ var RubeLoaderComponent = IgeClass.extend({
             //Return the line joint because it has the linear motor controls.
             //Use ApplyTorque on the bodies to spin the wheel...
 
-            var jd = new Box2D.Dynamics.Joints.b2DistanceJointDef();
+            jd = new Box2D.Dynamics.Joints.b2DistanceJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             jd.length = 0.0;
             if (jointJso.hasOwnProperty('springDampingRatio'))
@@ -306,7 +307,7 @@ var RubeLoaderComponent = IgeClass.extend({
             joint = ige.box2d._world.CreateJoint(jd);
         }
         else if (jointJso.type == "friction") {
-            var jd = new Box2D.Dynamics.Joints.b2FrictionJointDef();
+            jd = new Box2D.Dynamics.Joints.b2FrictionJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('maxForce'))
                 jd.maxForce = jointJso.maxForce;
@@ -315,7 +316,7 @@ var RubeLoaderComponent = IgeClass.extend({
             joint = ige.box2d._world.CreateJoint(jd);
         }
         else if (jointJso.type == "weld") {
-            var jd = new Box2D.Dynamics.Joints.b2WeldJointDef();
+            jd = new Box2D.Dynamics.Joints.b2WeldJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('refAngle'))
                 jd.referenceAngle = jointJso.refAngle * -1;
@@ -337,56 +338,61 @@ var RubeLoaderComponent = IgeClass.extend({
         }
         return joint;
     },
-    getByValue: function (arr, value) {
-
-        for (var i = 0, iLen = arr.length; i < iLen; i++) {
-            if (arr[i].name == value) return arr[i].int;
-        }
-    },
     loadImageFromRUBE: function (imageJso, mountScene, loadedBodies, isIsometric) {
+        var filename = "";
 
         if (imageJso.hasOwnProperty('body') && imageJso.body >= 0) {
-            var filename = this.GetFilename(imageJso.file, false);
+            filename = this.GetFilename(imageJso.file, false);
             var imageEntity = new IgeEntity()
-                .id(imageJso.name)
-                .isometric(isIsometric)
+                .id(imageJso.name + '-' + ige.newIdHex())
                 .texture(ige.client.gameTextures[filename]);
 
-            if (imageJso.hasOwnProperty('scale')) {
-                imageEntity.height(imageJso.scale * ige.box2d._scaleRatio * this._scale);
-            }
-
-            if (imageJso.hasOwnProperty('aspectScale')) {
-                imageEntity.width((imageJso.scale * imageJso.aspectScale) * ige.box2d._scaleRatio * this._scale);
-            }
-
-            if (imageJso.center.hasOwnProperty('x')) {
-                imageEntity.anchor(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1)
-            }
-
             imageEntity.mount(ige.$(loadedBodies[imageJso.body].name));
+            imageEntity.heightByTile(1, true);
 
+            if (imageJso.hasOwnProperty('scale')) {
+                imageEntity.scaleBy(imageJso.scale * ige.box2d._scaleRatio * this._scale, imageJso.scale * ige.box2d._scaleRatio * this._scale, 0);
+            }
+            if (imageJso.hasOwnProperty('aspectScale')) {
+                if (imageJso.aspectScale != 1)
+                    imageEntity.scaleBy(imageJso.scale * imageJso.aspectScale, 0, 0);
+            }
+            if (imageJso.hasOwnProperty('angle')) {
+                imageEntity.rotateTo(0, 0, imageJso.angle * -1);
+            }
+            if (imageJso.center.hasOwnProperty('x')) {
+                imageEntity.translateTo(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1, 0)
+            }
+
+            imageEntity.isometric(isIsometric)
         }
         else {
-            var filename = this.GetFilename(imageJso.file, false);
+            filename = this.GetFilename(imageJso.file, false);
             var backgroundImage = new IgeEntity()
-                .id(imageJso.name)
-                .isometric(isIsometric)
-                .texture(ige.client.gameTextures[filename])
-                .translateTo(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1, 0);
+                .id(imageJso.name + '-' + ige.newIdHex())
+                .texture(ige.client.gameTextures[filename]);
 
-            if (imageJso.hasOwnProperty('scale')) {
-                backgroundImage.height(imageJso.scale * ige.box2d._scaleRatio * this._scale);
-            }
-            if (imageJso.hasOwnProperty('aspectScale')) {
-                backgroundImage.width((imageJso.scale * imageJso.aspectScale) * ige.box2d._scaleRatio * this._scale);
+            if (imageJso.center.hasOwnProperty('x')) {
+                backgroundImage.translateTo(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1, 0)
             }
 
             backgroundImage.mount(ige.$(mountScene));
-        }
+            backgroundImage.heightByTile(.72, true);
 
-        if (!imageJso.hasOwnProperty('aspectScale'))
-            imageJso.aspectScale = 1;
+            if (imageJso.hasOwnProperty('scale')) {
+                if (imageJso.hasOwnProperty('aspectScale') && imageJso.aspectScale != 1) {
+                    backgroundImage.scaleBy(imageJso.scale * imageJso.aspectScale * this._scale, imageJso.scale * this._scale, 0);
+                }
+                else {
+                    backgroundImage.scaleBy(imageJso.scale * this._scale, imageJso.scale * this._scale, 0);
+                }
+            }
+            if (imageJso.hasOwnProperty('angle')) {
+                backgroundImage.rotateTo(0, 0, imageJso.angle * -1);
+            }
+
+            backgroundImage.isometric(isIsometric);
+        }
 
         return imageJso;
     },
@@ -404,9 +410,8 @@ var RubeLoaderComponent = IgeClass.extend({
                 return m[1];
             }
         }
-        return "";
+        return '';
     }
-
 });
 
 Object.prototype.hasOwnProperty = function (property) {
