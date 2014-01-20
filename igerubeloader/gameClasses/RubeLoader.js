@@ -16,41 +16,40 @@ var RubeLoaderComponent = IgeClass.extend({
     /**
      * Loads a .js Rube json-format file and converts to IGE,
      * creating box2d bodies,fixtures and joints.
-     * @param url
-     * @param callback
+     * @param sceneUrl
      * @param sceneName
      */
-    loadRubeScene: function (sceneName, url, callback) {
+    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric) {
         var self = this,
             scriptElem;
 
         this._scale = 1.3;
 
-        if (typeof(url) === 'string') {
+        if (typeof(sceneUrl) === 'string') {
             if (!ige.isServer) {
                 scriptElem = document.createElement('script');
-                scriptElem.src = url;
+                scriptElem.src = sceneUrl;
                 scriptElem.onload = function () {
                     self.log('Rube data loaded, processing...');
-                    self.loadSceneIntoWorld(window[sceneName], callback);
+                    self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric);
                 };
                 document.getElementsByTagName('head')[0].appendChild(scriptElem);
             } else {
                 this.log('URL-based Rube data is only available client-side. If you want to load Rube data on the server please include the Rube Scene file in your ServerConfig.js file and then specify the scene data object instead of the URL.', 'error');
             }
         } else {
-            self._processData(url, callback);
+            self.loadSceneIntoWorld(window[sceneName]);
         }
     },
 
-    loadSceneIntoWorld: function (worldJso, world) {
+    loadSceneIntoWorld: function (worldJso, mountScene, isIsometric) {
         var success = true;
 
         var loadedBodies = [];
         if (worldJso.hasOwnProperty('body')) {
             for (var i = 0; i < worldJso.body.length; i++) {
                 var bodyJso = worldJso.body[i];
-                var body = this.loadBodyFromRUBE(bodyJso, world);
+                var body = this.loadBodyFromRUBE(bodyJso, mountScene, isIsometric);
                 if (body)
                     loadedBodies.push(body);
                 else
@@ -62,7 +61,7 @@ var RubeLoaderComponent = IgeClass.extend({
         if (worldJso.hasOwnProperty('joint')) {
             for (var i = 0; i < worldJso.joint.length; i++) {
                 var jointJso = worldJso.joint[i];
-                var joint = this.loadJointFromRUBE(jointJso, world, loadedBodies);
+                var joint = this.loadJointFromRUBE(jointJso, mountScene, loadedBodies);
                 if (joint)
                     loadedJoints.push(joint);
                 //else
@@ -74,19 +73,19 @@ var RubeLoaderComponent = IgeClass.extend({
         if (worldJso.hasOwnProperty('image')) {
             for (var i = 0; i < worldJso.image.length; i++) {
                 var imageJso = worldJso.image[i];
-                var image = this.loadImageFromRUBE(imageJso, world, loadedBodies);
+                var image = this.loadImageFromRUBE(imageJso, mountScene, loadedBodies, isIsometric);
                 if (image)
                     loadedImages.push(image);
                 else
                     success = false;
             }
-            world.images = loadedImages;
+
         }
 
         return success;
     },
 
-    loadBodyFromRUBE: function (bodyJso, world) {
+    loadBodyFromRUBE: function (bodyJso, mountScene, isIsometric) {
 
         if (!bodyJso.hasOwnProperty('type')) {
             console.log("Body does not have a 'type' property");
@@ -113,11 +112,10 @@ var RubeLoaderComponent = IgeClass.extend({
         else
             bd.awake = false;
 
-
         var physicsEntity = new IgeEntityBox2d();
         physicsEntity.box2dBody(bd);
-        physicsEntity.isometric(true);
-        physicsEntity.mount(ige.$('scene1'));
+        physicsEntity.isometric(isIsometric);
+        physicsEntity.mount(ige.$(mountScene));
 
         if (bodyJso.hasOwnProperty('position') && bodyJso.position instanceof Object)
             physicsEntity.translateTo(bodyJso.position.x * ige.box2d._scaleRatio * this._scale, bodyJso.position.y * ige.box2d._scaleRatio * this._scale * -1, 0);
@@ -128,15 +126,18 @@ var RubeLoaderComponent = IgeClass.extend({
                 this.loadFixtureFromRUBE(physicsEntity._box2dBody, fixtureJso);
             }
         }
+
         if (bodyJso.hasOwnProperty('name'))
             physicsEntity._box2dBody.name = bodyJso.name;
         physicsEntity.id(bodyJso.name);
+
         if (bodyJso.hasOwnProperty('customProperties'))
             physicsEntity._box2dBody.customProperties = bodyJso.customProperties;
+
         return physicsEntity._box2dBody;
     },
     loadFixtureFromRUBE: function (body, fixtureJso) {
-        //console.log(fixtureJso);
+
         var fixture = null;
         var fd = new Box2D.Dynamics.b2FixtureDef();
         if (fixtureJso.hasOwnProperty('friction'))
@@ -196,13 +197,14 @@ var RubeLoaderComponent = IgeClass.extend({
                 fixture.customProperties = fixtureJso.customProperties;
         }
     },
+
     getVectorValue: function (val) {
         if (val instanceof Object)
             return new Box2D.Common.Math.b2Vec2(val.x * this._scale, val.y * this._scale * -1);
-
         else
             return { x: 0, y: 0 };
     },
+
     loadJointCommonProperties: function (jd, jointJso, loadedBodies) {
         jd.bodyA = loadedBodies[jointJso.bodyA];
         jd.bodyB = loadedBodies[jointJso.bodyB];
@@ -212,7 +214,7 @@ var RubeLoaderComponent = IgeClass.extend({
             jd.collideConnected = jointJso.collideConnected;
     },
 
-    loadJointFromRUBE: function (jointJso, world, loadedBodies) {
+    loadJointFromRUBE: function (jointJso, mountScene, loadedBodies) {
         if (!jointJso.hasOwnProperty('type')) {
             console.log("Joint does not have a 'type' property");
             return null;
@@ -341,29 +343,50 @@ var RubeLoaderComponent = IgeClass.extend({
             if (arr[i].name == value) return arr[i].int;
         }
     },
-    loadImageFromRUBE: function (imageJso, world, loadedBodies) {
+    loadImageFromRUBE: function (imageJso, mountScene, loadedBodies, isIsometric) {
 
         if (imageJso.hasOwnProperty('body') && imageJso.body >= 0) {
             var filename = this.GetFilename(imageJso.file, false);
-            var textureid = this.getByValue(imageJso.customProperties, 'texturearrayid');
-            ige.$(loadedBodies[imageJso.body].name).texture(ige.client.gameTextures[filename]);
+            var imageEntity = new IgeEntity()
+                .id(imageJso.name)
+                .isometric(isIsometric)
+                .texture(ige.client.gameTextures[filename]);
+
+            if (imageJso.hasOwnProperty('scale')) {
+                imageEntity.height(imageJso.scale * ige.box2d._scaleRatio * this._scale);
+            }
+
+            if (imageJso.hasOwnProperty('aspectScale')) {
+                imageEntity.width((imageJso.scale * imageJso.aspectScale) * ige.box2d._scaleRatio * this._scale);
+            }
+
+            if (imageJso.center.hasOwnProperty('x')) {
+                imageEntity.anchor(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1)
+            }
+
+            imageEntity.mount(ige.$(loadedBodies[imageJso.body].name));
 
         }
         else {
-            var bimage = new IgeEntity();
-            bimage.isometric(true);
-            var filename = imageJso.file.replace(/^.*[\\\/]/, '');
-            bimage.texture(filename);
-            bimage.cellById(filename);
-            bimage.mount(ige.$('scene1'));
-            imageJso.body = null;
+            var filename = this.GetFilename(imageJso.file, false);
+            var backgroundImage = new IgeEntity()
+                .id(imageJso.name)
+                .isometric(isIsometric)
+                .texture(ige.client.gameTextures[filename])
+                .translateTo(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1, 0);
+
+            if (imageJso.hasOwnProperty('scale')) {
+                backgroundImage.height(imageJso.scale * ige.box2d._scaleRatio * this._scale);
+            }
+            if (imageJso.hasOwnProperty('aspectScale')) {
+                backgroundImage.width((imageJso.scale * imageJso.aspectScale) * ige.box2d._scaleRatio * this._scale);
+            }
+
+            backgroundImage.mount(ige.$(mountScene));
         }
 
         if (!imageJso.hasOwnProperty('aspectScale'))
             imageJso.aspectScale = 1;
-
-        imageJso.center = new Box2D.Common.Math.b2Vec2(0, 0);
-        imageJso.center.SetV(new Box2D.Common.Math.b2Vec2(0, 0));
 
         return imageJso;
     },
