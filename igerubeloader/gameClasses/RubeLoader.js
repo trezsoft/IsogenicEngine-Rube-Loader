@@ -25,8 +25,6 @@ var RubeLoaderComponent = IgeClass.extend({
         var self = this,
             scriptElem;
 
-        this._scale = 1;
-
         if (typeof(sceneUrl) === 'string') {
             if (!ige.isServer) {
                 scriptElem = document.createElement('script');
@@ -102,13 +100,13 @@ var RubeLoaderComponent = IgeClass.extend({
         if (bodyJso.hasOwnProperty('angle'))
             bd.angle = bodyJso.angle * -1;
         if (bodyJso.hasOwnProperty('angularVelocity'))
-            bd.angularVelocity = bodyJso.angularVelocity * this._scale * -1;
+            bd.angularVelocity = bodyJso.angularVelocity * -1;
         if (bodyJso.hasOwnProperty('active'))
             bd.awake = bodyJso.active;
         if (bodyJso.hasOwnProperty('fixedRotation'))
             bd.fixedRotation = bodyJso.fixedRotation;
         if (bodyJso.hasOwnProperty('linearVelocity') && bodyJso.linearVelocity instanceof Object)
-            bd.linearVelocity.SetV(new ige.box2d.b2Vec2(bodyJso.linearVelocity.x * this._scale, bodyJso.linearVelocity.y * this._scale * -1));
+            bd.linearVelocity.SetV(new ige.box2d.b2Vec2(bodyJso.linearVelocity.x, bodyJso.linearVelocity.y * -1));
         if (bodyJso.hasOwnProperty('awake'))
             bd.awake = bodyJso.awake;
         else
@@ -120,7 +118,7 @@ var RubeLoaderComponent = IgeClass.extend({
         physicsEntity.mount(ige.$(mountScene));
 
         if (bodyJso.hasOwnProperty('position') && bodyJso.position instanceof Object)
-            physicsEntity.translateTo(bodyJso.position.x * ige.box2d._scaleRatio * this._scale, bodyJso.position.y * ige.box2d._scaleRatio * this._scale * -1, 0);
+            physicsEntity.translateTo(bodyJso.position.x * ige.box2d._scaleRatio, bodyJso.position.y * ige.box2d._scaleRatio * -1, 0);
 
         if (bodyJso.hasOwnProperty('fixture')) {
             for (var k = 0; k < bodyJso['fixture'].length; k++) {
@@ -159,9 +157,9 @@ var RubeLoaderComponent = IgeClass.extend({
             fd.filter.groupIndex = fixtureJso['filter-groupIndex'];
         if (fixtureJso.hasOwnProperty('circle')) {
             fd.shape = new Box2D.Collision.Shapes.b2CircleShape();
-            fd.shape.m_radius = fixtureJso.circle.radius * this._scale;
+            fd.shape.m_radius = fixtureJso.circle.radius;
             if (fixtureJso.circle.center)
-                fd.shape.m_p.SetV(new ige.box2d.b2Vec2(fixtureJso.circle.center.x * this._scale, fixtureJso.circle.center.y * this._scale * -1));
+                fd.shape.m_p.SetV(new ige.box2d.b2Vec2(fixtureJso.circle.center.x, fixtureJso.circle.center.y * -1));
             fixture = body.CreateFixture(fd);
             if (fixtureJso.name)
                 fixture.name = fixtureJso.name;
@@ -171,7 +169,7 @@ var RubeLoaderComponent = IgeClass.extend({
             var verts = [];
 
             for (var v = fixtureJso.polygon.vertices.x.length - 1; v > -1; v--)
-                verts.push(new ige.box2d.b2Vec2(fixtureJso.polygon.vertices.x[v] * this._scale, fixtureJso.polygon.vertices.y[v] * this._scale * -1));
+                verts.push(new ige.box2d.b2Vec2(fixtureJso.polygon.vertices.x[v], fixtureJso.polygon.vertices.y[v] * -1));
             fd.shape.SetAsArray(verts, verts.length);
             fixture = body.CreateFixture(fd);
             if (fixture && fixtureJso.name)
@@ -181,7 +179,7 @@ var RubeLoaderComponent = IgeClass.extend({
             fd.shape = new Box2D.Collision.Shapes.b2PolygonShape();
             var lastVertex = new Box2D.Common.Math.b2Vec2(0, 0);
             for (var v = 0; v < fixtureJso.chain.vertices.x.length; v++) {
-                var thisVertex = new Box2D.Common.Math.b2Vec2(fixtureJso.chain.vertices.x[v] * this._scale, fixtureJso.chain.vertices.y[v] * this._scale * -1);
+                var thisVertex = new Box2D.Common.Math.b2Vec2(fixtureJso.chain.vertices.x[v], fixtureJso.chain.vertices.y[v] * -1);
                 if (v > 0) {
                     fd.shape.SetAsEdge(lastVertex, thisVertex);
                     fixture = body.CreateFixture(fd);
@@ -203,7 +201,7 @@ var RubeLoaderComponent = IgeClass.extend({
 
     getVectorValue: function (val) {
         if (val instanceof Object)
-            return new Box2D.Common.Math.b2Vec2(val.x * this._scale, val.y * this._scale * -1);
+            return new Box2D.Common.Math.b2Vec2(val.x, val.y * -1);
         else
             return { x: 0, y: 0 };
     },
@@ -238,13 +236,13 @@ var RubeLoaderComponent = IgeClass.extend({
             if (jointJso.hasOwnProperty('refAngle'))
                 jd.referenceAngle = jointJso.refAngle * -1;
             if (jointJso.hasOwnProperty('lowerLimit'))
-                jd.lowerAngle = jointJso.lowerLimit * -1;
+                jd.lowerAngle = jointJso.lowerLimit;
             if (jointJso.hasOwnProperty('upperLimit'))
-                jd.upperAngle = jointJso.upperLimit * -1;
+                jd.upperAngle = jointJso.upperLimit;
             if (jointJso.hasOwnProperty('maxMotorTorque'))
-                jd.maxMotorTorque = jointJso.maxMotorTorque;
+                jd.maxMotorTorque = jointJso.maxMotorTorque * ige.box2d._scaleRatio;
             if (jointJso.hasOwnProperty('motorSpeed'))
-                jd.motorSpeed = -jointJso.motorSpeed;
+                jd.motorSpeed = jointJso.motorSpeed * -1;
             if (jointJso.hasOwnProperty('enableLimit'))
                 jd.enableLimit = jointJso.enableLimit;
             if (jointJso.hasOwnProperty('enableMotor'))
@@ -257,7 +255,7 @@ var RubeLoaderComponent = IgeClass.extend({
             jd = new Box2D.Dynamics.Joints.b2DistanceJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('length'))
-                jd.length = jointJso.length * this._scale;
+                jd.length = jointJso.length;
             if (jointJso.hasOwnProperty('dampingRatio'))
                 jd.dampingRatio = jointJso.dampingRatio;
             if (jointJso.hasOwnProperty('frequency'))
@@ -274,15 +272,15 @@ var RubeLoaderComponent = IgeClass.extend({
             if (jointJso.hasOwnProperty('enableLimit'))
                 jd.enableLimit = jointJso.enableLimit;
             if (jointJso.hasOwnProperty('lowerLimit'))
-                jd.lowerTranslation = jointJso.lowerLimit * this._scale;
+                jd.lowerTranslation = jointJso.lowerLimit * -1;
             if (jointJso.hasOwnProperty('upperLimit'))
-                jd.upperTranslation = jointJso.upperLimit * this._scale * this._scale;
+                jd.upperTranslation = jointJso.upperLimit * -1;
             if (jointJso.hasOwnProperty('enableMotor'))
                 jd.enableMotor = jointJso.enableMotor;
             if (jointJso.hasOwnProperty('maxMotorForce'))
-                jd.maxMotorForce = jointJso.maxMotorForce;
+                jd.maxMotorForce = jointJso.maxMotorForce * ige.box2d._scaleRatio;
             if (jointJso.hasOwnProperty('motorSpeed'))
-                jd.motorSpeed = jointJso.motorSpeed;
+                jd.motorSpeed = jointJso.motorSpeed * -1;
             joint = ige.box2d._world.CreateJoint(jd);
         }
         else if (jointJso.type == "wheel") {
@@ -310,9 +308,9 @@ var RubeLoaderComponent = IgeClass.extend({
             jd = new Box2D.Dynamics.Joints.b2FrictionJointDef();
             this.loadJointCommonProperties(jd, jointJso, loadedBodies);
             if (jointJso.hasOwnProperty('maxForce'))
-                jd.maxForce = jointJso.maxForce;
+                jd.maxForce = jointJso.maxForce * 5;
             if (jointJso.hasOwnProperty('maxTorque'))
-                jd.maxTorque = jointJso.maxTorque;
+                jd.maxTorque = jointJso.maxTorque * 3.5;
             joint = ige.box2d._world.CreateJoint(jd);
         }
         else if (jointJso.type == "weld") {
@@ -351,7 +349,7 @@ var RubeLoaderComponent = IgeClass.extend({
             imageEntity.heightByTile(1, true);
 
             if (imageJso.hasOwnProperty('scale')) {
-                imageEntity.scaleBy(imageJso.scale * ige.box2d._scaleRatio * this._scale, imageJso.scale * ige.box2d._scaleRatio * this._scale, 0);
+                imageEntity.scaleBy(imageJso.scale * ige.box2d._scaleRatio, imageJso.scale * ige.box2d._scaleRatio, 0);
             }
             if (imageJso.hasOwnProperty('aspectScale')) {
                 if (imageJso.aspectScale != 1)
@@ -361,7 +359,7 @@ var RubeLoaderComponent = IgeClass.extend({
                 imageEntity.rotateTo(0, 0, imageJso.angle * -1);
             }
             if (imageJso.center.hasOwnProperty('x')) {
-                imageEntity.translateTo(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1, 0)
+                imageEntity.translateTo(imageJso.center.x * ige.box2d._scaleRatio, imageJso.center.y * ige.box2d._scaleRatio * -1, 0)
             }
 
             imageEntity.isometric(isIsometric)
@@ -373,7 +371,7 @@ var RubeLoaderComponent = IgeClass.extend({
                 .texture(ige.client.gameTextures[filename]);
 
             if (imageJso.center.hasOwnProperty('x')) {
-                backgroundImage.translateTo(imageJso.center.x * ige.box2d._scaleRatio * this._scale, imageJso.center.y * ige.box2d._scaleRatio * this._scale * -1, 0)
+                backgroundImage.translateTo(imageJso.center.x * ige.box2d._scaleRatio, imageJso.center.y * ige.box2d._scaleRatio * -1, 0)
             }
 
             backgroundImage.mount(ige.$(mountScene));
@@ -381,10 +379,10 @@ var RubeLoaderComponent = IgeClass.extend({
 
             if (imageJso.hasOwnProperty('scale')) {
                 if (imageJso.hasOwnProperty('aspectScale') && imageJso.aspectScale != 1) {
-                    backgroundImage.scaleBy(imageJso.scale * imageJso.aspectScale * this._scale, imageJso.scale * this._scale, 0);
+                    backgroundImage.scaleBy(imageJso.scale * imageJso.aspectScale, imageJso.scale, 0);
                 }
                 else {
-                    backgroundImage.scaleBy(imageJso.scale * this._scale, imageJso.scale * this._scale, 0);
+                    backgroundImage.scaleBy(imageJso.scale, imageJso.scale, 0);
                 }
             }
             if (imageJso.hasOwnProperty('angle')) {
