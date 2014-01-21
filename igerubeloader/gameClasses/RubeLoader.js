@@ -21,7 +21,7 @@ var RubeLoaderComponent = IgeClass.extend({
      * @param isIsometric
      * @param loadImages
      */
-    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric, loadImages) {
+    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric, loadImages, callback) {
         var self = this,
             scriptElem;
 
@@ -31,14 +31,14 @@ var RubeLoaderComponent = IgeClass.extend({
                 scriptElem.src = sceneUrl;
                 scriptElem.onload = function () {
                     self.log('Rube data loaded, processing...');
-                    self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages);
+                    callback(self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages));
                 };
                 document.getElementsByTagName('head')[0].appendChild(scriptElem);
             } else {
                 this.log('URL-based Rube data is only available client-side. If you want to load Rube data on the server please include the Rube Scene file in your ServerConfig.js file and then specify the scene data object instead of the URL.', 'error');
             }
         } else {
-            self.loadSceneIntoWorld(window[sceneName]);
+            callback(self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages));
         }
     },
 
@@ -83,6 +83,7 @@ var RubeLoaderComponent = IgeClass.extend({
         }
 
         return success;
+
     },
 
     loadBodyFromRUBE: function (bodyJso, mountScene, isIsometric) {
@@ -115,6 +116,12 @@ var RubeLoaderComponent = IgeClass.extend({
         var physicsEntity = new IgeEntityBox2d();
         physicsEntity.box2dBody(bd);
         physicsEntity.isometric(isIsometric);
+
+        if (bodyJso.hasOwnProperty('name')) {
+            physicsEntity._box2dBody.name = bodyJso.name;
+            physicsEntity.id(bodyJso.name);
+        }
+
         physicsEntity.mount(ige.$(mountScene));
 
         if (bodyJso.hasOwnProperty('position') && bodyJso.position instanceof Object)
@@ -126,11 +133,6 @@ var RubeLoaderComponent = IgeClass.extend({
                 this.loadFixtureFromRUBE(physicsEntity._box2dBody, fixtureJso);
             }
         }
-
-        if (bodyJso.hasOwnProperty('name'))
-            var randomId = bodyJso.name + '-' + ige.newIdHex();
-        physicsEntity._box2dBody.name = randomId;
-        physicsEntity.id(randomId);
 
         if (bodyJso.hasOwnProperty('customProperties'))
             physicsEntity._box2dBody.customProperties = bodyJso.customProperties;
@@ -272,15 +274,15 @@ var RubeLoaderComponent = IgeClass.extend({
             if (jointJso.hasOwnProperty('enableLimit'))
                 jd.enableLimit = jointJso.enableLimit;
             if (jointJso.hasOwnProperty('lowerLimit'))
-                jd.lowerTranslation = jointJso.lowerLimit * -1;
+                jd.lowerTranslation = jointJso.lowerLimit;
             if (jointJso.hasOwnProperty('upperLimit'))
-                jd.upperTranslation = jointJso.upperLimit * -1;
+                jd.upperTranslation = jointJso.upperLimit;
             if (jointJso.hasOwnProperty('enableMotor'))
                 jd.enableMotor = jointJso.enableMotor;
             if (jointJso.hasOwnProperty('maxMotorForce'))
                 jd.maxMotorForce = jointJso.maxMotorForce * ige.box2d._scaleRatio;
             if (jointJso.hasOwnProperty('motorSpeed'))
-                jd.motorSpeed = jointJso.motorSpeed * -1;
+                jd.motorSpeed = jointJso.motorSpeed;
             joint = ige.box2d._world.CreateJoint(jd);
         }
         else if (jointJso.type == "wheel") {
