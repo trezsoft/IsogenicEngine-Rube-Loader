@@ -21,7 +21,7 @@ var RubeLoaderComponent = IgeClass.extend({
      * @param isIsometric
      * @param loadImages
      */
-    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric, loadImages, callback) {
+    loadRubeScene: function (sceneName, sceneUrl, mountScene, isIsometric, loadImages, createUniqueIds, callback) {
         var self = this,
             scriptElem;
 
@@ -31,25 +31,25 @@ var RubeLoaderComponent = IgeClass.extend({
                 scriptElem.src = sceneUrl;
                 scriptElem.onload = function () {
                     self.log('Rube data loaded, processing...');
-                    callback(self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages));
+                    callback(self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages, createUniqueIds));
                 };
                 document.getElementsByTagName('head')[0].appendChild(scriptElem);
             } else {
                 this.log('URL-based Rube data is only available client-side. If you want to load Rube data on the server please include the Rube Scene file in your ServerConfig.js file and then specify the scene data object instead of the URL.', 'error');
             }
         } else {
-            callback(self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages));
+            callback(self.loadSceneIntoWorld(window[sceneName], mountScene, isIsometric, loadImages, createUniqueIds));
         }
     },
 
-    loadSceneIntoWorld: function (worldJso, mountScene, isIsometric, loadImages) {
+    loadSceneIntoWorld: function (worldJso, mountScene, isIsometric, loadImages, createUniqueIds) {
         var success = true, i;
 
         var loadedBodies = [];
         if (worldJso.hasOwnProperty('body')) {
             for (i = 0; i < worldJso.body.length; i++) {
                 var bodyJso = worldJso.body[i];
-                var body = this.loadBodyFromRUBE(bodyJso, mountScene, isIsometric);
+                var body = this.loadBodyFromRUBE(bodyJso, mountScene, isIsometric, createUniqueIds);
                 if (body)
                     loadedBodies.push(body);
                 else
@@ -86,7 +86,7 @@ var RubeLoaderComponent = IgeClass.extend({
 
     },
 
-    loadBodyFromRUBE: function (bodyJso, mountScene, isIsometric) {
+    loadBodyFromRUBE: function (bodyJso, mountScene, isIsometric, createUniqueIds) {
 
         if (!bodyJso.hasOwnProperty('type')) {
             console.log("Body does not have a 'type' property");
@@ -119,7 +119,12 @@ var RubeLoaderComponent = IgeClass.extend({
 
         if (bodyJso.hasOwnProperty('name')) {
             physicsEntity._box2dBody.name = bodyJso.name;
-            physicsEntity.id(bodyJso.name);
+            if (createUniqueIds) {
+                physicsEntity.id(bodyJso.name + '-' + ige.newIdHex());
+            }
+            else {
+                physicsEntity.id(bodyJso.name);
+            }
         }
 
         physicsEntity.mount(ige.$(mountScene));
@@ -242,7 +247,7 @@ var RubeLoaderComponent = IgeClass.extend({
             if (jointJso.hasOwnProperty('upperLimit'))
                 jd.upperAngle = jointJso.upperLimit;
             if (jointJso.hasOwnProperty('maxMotorTorque'))
-                jd.maxMotorTorque = jointJso.maxMotorTorque * ige.box2d._scaleRatio;
+                jd.maxMotorTorque = jointJso.maxMotorTorque;
             if (jointJso.hasOwnProperty('motorSpeed'))
                 jd.motorSpeed = jointJso.motorSpeed * -1;
             if (jointJso.hasOwnProperty('enableLimit'))
@@ -280,7 +285,7 @@ var RubeLoaderComponent = IgeClass.extend({
             if (jointJso.hasOwnProperty('enableMotor'))
                 jd.enableMotor = jointJso.enableMotor;
             if (jointJso.hasOwnProperty('maxMotorForce'))
-                jd.maxMotorForce = jointJso.maxMotorForce * ige.box2d._scaleRatio;
+                jd.maxMotorForce = jointJso.maxMotorForce;
             if (jointJso.hasOwnProperty('motorSpeed'))
                 jd.motorSpeed = jointJso.motorSpeed;
             joint = ige.box2d._world.CreateJoint(jd);
@@ -350,6 +355,8 @@ var RubeLoaderComponent = IgeClass.extend({
             imageEntity.mount(ige.$(loadedBodies[imageJso.body].name));
             imageEntity.heightByTile(1, true);
 
+            console.log(ige.$(loadedBodies[imageJso.body].name) + '  Mounted');
+
             if (imageJso.hasOwnProperty('scale')) {
                 imageEntity.scaleBy(imageJso.scale * ige.box2d._scaleRatio, imageJso.scale * ige.box2d._scaleRatio, 0);
             }
@@ -362,6 +369,10 @@ var RubeLoaderComponent = IgeClass.extend({
             }
             if (imageJso.center.hasOwnProperty('x')) {
                 imageEntity.translateTo(imageJso.center.x * ige.box2d._scaleRatio, imageJso.center.y * ige.box2d._scaleRatio * -1, 0)
+            }
+
+            if (imageJso.hasOwnProperty('renderOrder')) {
+                imageEntity.parent().depth(imageJso.renderOrder);
             }
 
             imageEntity.isometric(isIsometric)
@@ -403,11 +414,11 @@ var RubeLoaderComponent = IgeClass.extend({
                 m = url.replace(/^.*[\\\/]/, '');
             }
             else {
-                m = url.toString().match(/.*\/(.+?)\./);
+                m = url.toString().match(/[^\/]*(?=\.[^.]+($|\?))/);
             }
 
-            if (m && m.length > 1) {
-                return m[1];
+            if (m[0] && m[0].length > 1) {
+                return m[0];
             }
         }
         return '';
